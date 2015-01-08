@@ -91,8 +91,13 @@ BOOL ValidData = FALSE;
 TIMER0
 {
     TimeCounter += 12;
-    if ( TimeCounter >= 4000/* (4000 * CLOCKSPEED) */){
-        TimeCounter -= 4000/* (4000 * CLOCKSPEED) */;
+#ifdef _DEBUG_
+    if ( TimeCounter >= 4000){
+        TimeCounter -= 4000;
+#else
+    if ( TimeCounter >= (4000 * CLOCKSPEED)){
+        TimeCounter -= (4000 * CLOCKSPEED);
+#endif
         SecsCounter ++;
         if ( SecsCounter >= TIMESTEP){
             SecsCounter = 0;
@@ -150,7 +155,7 @@ InfraRead0() interrupt 0 using 3
 
     Extra = 0x00; // Reset the verify data byte
 
-    for ( J = 0; J < 4; J++) { // Loop for 4 bits of verify data
+    for ( J = 0; J < 4; J++) { // Loop for 4 bits of verifying data
         PulseWidth = MeasurePW( 0); // Wait until 0 finished
         if (PulseWidth == 0xff) goto Finish; // If 0 has taken long time skip infra data input
         PulseWidth = MeasurePW( 1); // Measure 1 pulse time
