@@ -1,7 +1,7 @@
 #include <reg51.h>
 // #include <intrins.h>
 
-#define _DEBUG_
+// #define _DEBUG_
 
 #define CLOCKSPEED      8
 // 8 MHz.
@@ -41,34 +41,34 @@
 // ( 100 * CLOCKSPEED)
 #define Beep()              BeepCounter = 255
 
+code TEMP_TABLE[14] = {9, 10, 10, 11, 11, 12, 13, 13, 14, 14, 15, 16, 16, 17};
+
 sbit OPAMP_OUTPUT   = P3^6;
 sbit INFRAINPUT	    = P3^2;
-
-
+/*
 BOOL PUMPER;
 BOOL W4;
 BOOL FANLOW;
 BOOL FANMID;
 BOOL FANHIG;
 BOOL SWING;
-/*
-sbit PUMPER         = P1^7;
-sbit W4             = P1^6;
-sbit FANLOW         = P1^5;
-sbit FANMID         = P1^4;
-sbit FANHIG         = P1^3;
-sbit SWING          = P1^2;
 */
-sbit N_INPUT        = P1^1;
-sbit P_INPUT        = P1^0;
-sbit CAP            = P1^0;
-sbit Spkr           = P3^4;
-#ifdef _DEBUG_
-sbit INDUCATOR1     = P3^0;
-sbit INDUCATOR2     = P3^7;
-sbit INDUCATOR3     = P3^5;
-sbit INDUCATOR4     = P3^1;
-#endif
+sbit FANLOW          = P1^2;
+sbit FANMID          = P1^3;
+sbit FANHIG          = P1^4;
+sbit PUMPER          = P1^5;
+sbit W4              = P1^6;
+sbit SWING           = P1^7;
+
+sbit N_INPUT         = P1^1;
+sbit P_INPUT         = P1^0;
+sbit CAP             = P1^0;
+sbit SPKR            = P3^3;
+
+sbit ONOFF_INDUCATOR = P3^7;
+sbit HEAT_INDUCATOR  = P3^0;
+sbit COOL_INDUCATOR  = P3^1;
+sbit TIMER_INDUCATOR = P3^5;
 
 WORD TimeCounter        = 0;
 BYTE SecsCounter        = 0;
@@ -80,24 +80,22 @@ BYTE FanOffDelay        = SECUND( 0);
 BYTE FanChangeDelay     = SECUND( 0);
 BYTE W4Delay            = SECUND( 120);
 BYTE W4OffDelay         = SECUND( 0);
-BYTE Mode               = modCOOL;
-BYTE FanMode            = fanmAUTO;
 BOOL SwingOn            = FALSE;
 BOOL OnOff              = FALSE;
 BOOL PumperOn           = FALSE;
 BOOL W4On               = FALSE;
 BOOL Continuous         = FALSE;
+BYTE Mode               = modCOOL;
+BYTE FanMode            = fanmAUTO;
 BYTE FanSpeed           = 0;
-BYTE ReqTemp            = 28;
-BYTE CurrentTemp        = 20;
+SINT ReqTemp            = 25;
+SINT CurrentTemp        = 20;
+SINT TempDelta          = -1;
 BOOL NewDataRescived    = FALSE;
 BOOL TimeAdvanceReq     = FALSE;
 BYTE SwitchMode         = swmNONE;
 BYTE RemuteData[6];
 BYTE BeepCounter        = 0;
-#ifdef _DEBUG_
-BOOL ValidData = FALSE;
-#endif
 
 TIMER0
 {
@@ -117,10 +115,10 @@ TIMER0
         }
 
     if (BeepCounter > 0) {
-        Spkr = ~Spkr;
+        SPKR = ~SPKR;
         BeepCounter --;
         }
-    else Spkr = 0;
+    else SPKR = 0;
 }
 
 BYTE MeasurePW( BOOL Value)
@@ -146,10 +144,6 @@ InfraRead0() interrupt 0 using 3
 	register BYTE PulseWidth;
 	register BYTE I, J, Extra;
 
-#ifdef _DEBUG_
-    INDUCATOR3 = 0;
-    ValidData = FALSE;
-#endif
     NewDataRescived = FALSE;
 
     PulseWidth = MeasurePW( 0);
@@ -183,21 +177,15 @@ InfraRead0() interrupt 0 using 3
     MeasurePW( 0);  // Wait until 0 finished
 
     if (( Extra == 0x20) && (( RemuteData[5] & 0xf0) == 0x20) ){ // Verify the data integrity
-#ifdef _DEBUG_
-        ValidData = TRUE; // Set ~ValidData~ flag to true indicating to correct infra data recived
-#endif
         NewDataRescived = TRUE; // Set ~NewDataRescived~ flag to true indicating to new infra data recived
         };
 Finish:
-#ifdef _DEBUG_
-    INDUCATOR3 = 1;
-#endif
     TF1 = 1; // Set timer overflow flag on to protect another time measurments actions from blocking
 	IE0 = 0; // Clear another interrupt requests that occured by series of pulses
 }
 
 #ifdef _DEBUG_
-
+/*
 void Delay( INT ATime)
 {
     TF1 = 0;
@@ -206,11 +194,11 @@ void Delay( INT ATime)
     TR1 = 1;
 	while (!TF1);
 }
-
+*/
 #endif
 
 
-BYTE ReadTemperature_( VOID)
+SINT ReadTemperature_( VOID)
 {
     WORD Time;
     CAP = 0; // Start capacitor discharging
@@ -223,18 +211,22 @@ BYTE ReadTemperature_( VOID)
     TF1 = 0; // Clear timer overflow flag
 	TH1 = 0x00; // Load timer high order value
     TL1 = 0x00; // Load timer low order value
+/*
 #ifdef _DEBUG_
     INDUCATOR1 = 0; // Switch on temperature measurment inducator
 #endif
+*/
     CAP = 1; // Start capacitor charging
     TR1 = 1; // Start timer to measure charging time
     while ((OPAMP_OUTPUT == 0) && (TF1 == 0)); // Wait until capacitor
     // voltage reachs mesured voltage or timer overflows
     TR1 = 0; // Stop timer to read its value
     CAP = 0; // Start capacitor discharging
+/*
 #ifdef _DEBUG_
     INDUCATOR1 = 1; // Switch off temperature measurment inducator
 #endif
+*/
     if ( TF1 == 0) { // If timer overflow hasn`t ocured
 	    *( BYTE *)((( BYTE *)(&Time)) + 0) = TH1; // Get timer high order value
         *( BYTE *)((( BYTE *)(&Time)) + 1) = TL1; // Get timer low order value
@@ -244,7 +236,7 @@ BYTE ReadTemperature_( VOID)
     else return 0x00; // If timer overflow has ocured
 }
 
-BYTE ReadTemperature( VOID)
+SINT ReadTemperature( VOID)
 {
     // Read temperature three times and take the larger value
     BYTE T1 = ReadTemperature_();
@@ -430,7 +422,6 @@ VOID SwitchW4Off( VOID)
 
 VOID TimeAdvance( VOID)
 {
-    /*
     PumperDelay = 0;
     PumperOffDelay = 0;
     FanDelay = 0;
@@ -438,7 +429,7 @@ VOID TimeAdvance( VOID)
     FanChangeDelay = 0;
     W4Delay = 0;
     W4OffDelay = 0;
-    */
+    /*
     if ( PumperDelay > SECUND( 0)) PumperDelay -= SECUND( TIMESTEP);
     if ( PumperOffDelay > SECUND( 0)) PumperOffDelay -= SECUND( TIMESTEP);
     if ( FanDelay > SECUND( 0)) FanDelay -= SECUND( TIMESTEP);
@@ -447,6 +438,7 @@ VOID TimeAdvance( VOID)
     if ( W4Delay > SECUND( 0)) W4Delay -= SECUND( TIMESTEP);
     if ( W4OffDelay > SECUND( 0)) W4OffDelay -= SECUND( TIMESTEP);
     if ( Timer > SECUND( 0)) Timer -= SECUND( TIMESTEP);
+    */
 }
 
 VOID FanProcess( BYTE ATempDelta, BOOL AContinuous)
@@ -496,45 +488,44 @@ VOID Process( VOID)
 {
     BOOL OnOffState;
 
+    TIMER_INDUCATOR = TRUE;
     if ( OnOff) {
+       ONOFF_INDUCATOR = FALSE;
+       OnOffState = TRUE;
        switch ( SwitchMode){
            case swmSLEEP:
-               OnOffState = (Timer > 0);
-#ifdef _DEBUG_
-               INDUCATOR4 = 0;
-               INDUCATOR2 = 1;
-#endif
+               if ( Timer == 0) OnOffState = FALSE;
                break;
            case swmTIMER:
-               OnOffState = (Timer == 0);
-#ifdef _DEBUG_
-               INDUCATOR4 = 1;
-               INDUCATOR2 = 0;
-#endif
+               if (Timer != 0) {
+                   OnOffState = FALSE;
+                   TIMER_INDUCATOR = FALSE;
+                   }
                break;
-           default:
-               OnOffState = TRUE;
-#ifdef _DEBUG_
-               INDUCATOR4 = 1;
-               INDUCATOR2 = 1;
-#endif
            }
        }
-    else OnOffState = FALSE;
+    else {
+       ONOFF_INDUCATOR = TRUE;
+       HEAT_INDUCATOR = TRUE;
+       COOL_INDUCATOR = TRUE;
+       OnOffState = FALSE;
+       }
 
     if ( OnOffState) {
         switch ( Mode){
             case modHEAT:
-                if (( CurrentTemp < ReqTemp) || (Continuous == TRUE)){
+                HEAT_INDUCATOR = FALSE;
+                COOL_INDUCATOR = TRUE;
+                if (( CurrentTemp < (ReqTemp + TempDelta)) || (Continuous == TRUE)){
+                    TempDelta = 1;
                     if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0) && ( W4On == TRUE)) SwitchPumperOn();
                     else SwitchPumperOff();
-
                     FanProcess( ReqTemp - CurrentTemp, Continuous);
-
                     if (( W4Delay == SECUND( 0)) && ( FanSpeed != 0)) SwitchW4On();
                     else SwitchW4Off();
                     }
                 else {
+                    TempDelta = -1;
                     if ( PumperOffDelay == SECUND( 0)) {
                         SwitchPumperOff();
                         if ( W4OffDelay == SECUND( 0)){
@@ -545,16 +536,17 @@ VOID Process( VOID)
                     }
                 break;
             case modCOOL:
+                HEAT_INDUCATOR = TRUE;
+                COOL_INDUCATOR = FALSE;
                 if ( W4On == TRUE) SwitchW4Off();
-
-                if (( CurrentTemp > ReqTemp) || (Continuous == TRUE)){
+                if (( CurrentTemp > (ReqTemp - TempDelta)) || (Continuous == TRUE)){
+                    TempDelta = 1;
                     if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0)) SwitchPumperOn();
                     else SwitchPumperOff();
-
                     FanProcess( CurrentTemp - ReqTemp, Continuous);
-
                     }
                 else {
+                    TempDelta = -1;
                     if ( PumperOffDelay == SECUND( 0)) {
                         SwitchPumperOff();
                         if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
@@ -563,13 +555,16 @@ VOID Process( VOID)
                 break;
             case modDRY:
             case modFAN:
+                HEAT_INDUCATOR = TRUE;
+                COOL_INDUCATOR = TRUE;
                 if ( W4On == TRUE) SwitchW4Off();
                 if ( PumperOn == TRUE) SwitchPumperOff();
-
-                if (( CurrentTemp > ReqTemp) || (Continuous == TRUE)){
+                if (( CurrentTemp > (ReqTemp - TempDelta)) || (Continuous == TRUE)){
+                    TempDelta = 1;
                     FanProcess( CurrentTemp - ReqTemp, Continuous);
                     }
                 else {
+                    TempDelta = -1;
                     if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
                     }
                 break;
@@ -633,6 +628,7 @@ VOID ProcessRecivedData()
             */
             if ( NewMode != Mode){
                 Mode = NewMode;
+                TempDelta = -1;
                 _SetOffDelays();
                 }
             }
@@ -649,7 +645,7 @@ VOID ProcessRecivedData()
                    break;
                default:
                    Continuous = FALSE;
-                   ReqTemp = Temp + 17;
+                   ReqTemp = TEMP_TABLE[ Temp];
                }
             }
         switch ( RemuteData[0] & 0x30){
@@ -668,7 +664,7 @@ VOID ProcessRecivedData()
 
         SwitchMode = (RemuteData[4] & 0x60) >> 5;
 
-        if ( SwitchMode == swmSLEEP) Timer = SECUND( 60) * 10;
+        if ( SwitchMode == swmSLEEP) Timer = SECUND( 60) * 30;
         else {
             Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
             if ( Timer > (24 * 60)) Timer -= (24 * 60);
@@ -690,6 +686,10 @@ main()
     SWING = FALSE;
     P_INPUT = 1;
     N_INPUT = 1;
+    ONOFF_INDUCATOR = TRUE;
+    HEAT_INDUCATOR  = TRUE;
+    COOL_INDUCATOR  = TRUE;
+    TIMER_INDUCATOR = TRUE;
 
     IE0 = 0; // clear External 0 interrupt request
 	IP = 0x03; // set high intrrupt priorery to timer0 and external interrupt0
@@ -702,18 +702,6 @@ main()
 	EX0 = 1; // enable External 0 interrupt
     EA = 1; // global interrupt enable
 
-#ifdef _DEBUG_
-    {
-        BYTE I;
-        for (I=0;I<5;I++){
-            INDUCATOR1 = 0;
-            Delay(- 30000);
-            INDUCATOR1 = 1;
-            Delay(- 30000);
-            }
-        Delay(- 30000);
-        }
-#endif
     Beep();
 
     while (TRUE) {
@@ -724,12 +712,9 @@ main()
        if ( TimeAdvanceReq) {
            TimeAdvanceReq = FALSE;
            CurrentTemp = ReadTemperature();
-#ifdef _DEBUG_
-           CurrentTemp = 23;
-#endif
            Process();
            TimeAdvance();
-           P1 = (((~( CurrentTemp)) << 2) | 0x03);
+           // P1 = (((~( CurrentTemp)) << 2) | 0x03);
            };
        }
 }
