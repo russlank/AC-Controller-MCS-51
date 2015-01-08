@@ -395,7 +395,7 @@ VOID FanProcess( BYTE ATempDelta, BOOL AContinuous)
                if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
                break;
            default:
-               if ( AContinuous == TRUE) {
+               if (AContinuous == TRUE) {
                    if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
                    }
                else if ( ATempDelta > 6) {
@@ -460,23 +460,6 @@ VOID Process( VOID)
                     else SwitchPumperOff();
 
                     FanProcess( CurrentTemp - ReqTemp, Continuous);
-                    /*
-                    if ( FanDelay == SECUND( 0)){
-                        if (Continuous == TRUE){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else if (( CurrentTemp - ReqTemp) > 6){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
-                            }
-                        else if (( CurrentTemp - ReqTemp) > 3){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else {
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
-                            }
-                        }
-                    else SwitchFanSpeed( 0);
-                    */
                     }
                 else {
                     if ( PumperOffDelay == SECUND( 0)) {
@@ -491,23 +474,6 @@ VOID Process( VOID)
 
                 if (( CurrentTemp > ReqTemp) || (Continuous == TRUE)){
                     FanProcess( CurrentTemp - ReqTemp, Continuous);
-                    /*
-                    if ( FanDelay == SECUND( 0)) {
-                        if (Continuous == TRUE){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else if (( CurrentTemp - ReqTemp) > 6){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
-                            }
-                        else if (( CurrentTemp - ReqTemp) > 3){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else {
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
-                            }
-                        }
-                    else SwitchFanSpeed( 0);
-                    */
                     }
                 else {
                     if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
@@ -628,7 +594,7 @@ main()
        if ( TimeAdvanceReq) {
            TimeAdvanceReq = FALSE;
            CurrentTemp = ReadTemperature();
-           CurrentTemp = 20;
+           CurrentTemp = 23;
            Process();
            TimeAdvance();
            // P1 = (((~( CurrentTemp)) << 2) | 0x03);
