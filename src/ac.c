@@ -16,10 +16,7 @@
 #define VOID            void
 
 #define CLOCKTIMERPERIOD    (-250)
-// #define MAXPULSETIME		0x1A * 4 * 3
-// #define MAXLONGPULSETIME	10000 * 3
-// #define TIMETHREASHOULD 	0x1A * 1
-#define TIMETHREASHOULD 	400
+#define TIMETHREASHOULD 	800
 
 sbit CAP           = P1^0;
 sbit OPAMP         = P3^6;
@@ -35,15 +32,16 @@ sbit INDUCATOR3     = P3^5;
 #define modCOLD     1
 #define modHOT      2
 
-WORD Time;
+WORD TimeCounter = 0;
+BYTE SecsCounter = 0;
 BYTE Data[6];
 
-WORD PumperDelay        = 600;
+WORD PumperDelay        = 60; // * 10 sec.
 WORD PumperOffDelay     = 0;
-WORD FanDelay           = 60;
+WORD FanDelay           = 6; // * 10 sec.
 WORD FanOffDelay        = 0;
 WORD FanChangeDelay     = 0;
-WORD W4Delay            = 120;
+WORD W4Delay            = 12; // * 10 sec.
 WORD W4OffDelay         = 0;
 BYTE Mode               = modOFF;
 
@@ -56,17 +54,19 @@ BYTE CurrentTemp = 20;
 
 BOOL ValidData = FALSE;
 BOOL NewDataRescived = FALSE;
+BOOL TimeAdvanceReq = FALSE;
 
 TIMER0
 {
-    Time++;
-    if ( PumperDelay > 0) PumperDelay--;
-    if ( PumperOffDelay > 0) PumperOffDelay--;
-    if ( FanDelay > 0) FanDelay--;
-    if ( FanOffDelay > 0) FanOffDelay--;
-    if ( FanChangeDelay > 0) FanChangeDelay--;
-    if ( W4Delay > 0) W4Delay--;
-    if ( W4OffDelay > 0) W4OffDelay--;
+    TimeCounter += 12;
+    if ( TimeCounter >= 32000){
+        TimeCounter -= 32000;
+        SecsCounter ++;
+        if ( SecsCounter >= 10){
+            SecsCounter = 0;
+            TimeAdvanceReq = TRUE;
+            }
+        }
 }
 /*
 
@@ -193,7 +193,7 @@ InfraRead0() interrupt 0 using 3
 
     MeasurePW( 0);
 
-    if (( Extra & 0xf0) == ( Data[5] & 0xf0)){
+    if (( Extra == 0x20) && (( Data[5] & 0xf0) == 0x20) ){
         ValidData = TRUE;
         NewDataRescived = TRUE;
         };
@@ -238,10 +238,10 @@ BYTE ReadTemperature_( VOID)
     if ( TF1 == 0) {
 	    *( BYTE *)((( BYTE *)(&Time)) + 0) = TH1;
         *( BYTE *)((( BYTE *)(&Time)) + 1) = TL1;
-        Time = (( Time >> 6) & 0x00ff);
+        Time = (( Time >> 7) & 0x00ff);
         return (*( BYTE *)((( BYTE *)(&Time)) + 1));
         }
-    else return 0xff;
+    else return 0x00;
 }
 
 BYTE ReadTemperature( VOID)
@@ -256,7 +256,7 @@ BYTE ReadTemperature( VOID)
          else return T3;
 }
 
-/*
+
 VOID DisplayData( VOID)
 {
     BYTE I, J;
@@ -299,9 +299,9 @@ VOID SwitchToHot( VOID)
 {
     if (Mode != modHOT){
         Mode = modHOT;
-        PumperOffDelay = 10;
-        W4OffDelay     = 20;
-        FanOffDelay    = 30;
+        PumperOffDelay = 1;
+        W4OffDelay     = 2;
+        FanOffDelay    = 3;
         }
 }
 
@@ -309,9 +309,9 @@ VOID SwitchToCold( VOID)
 {
     if (Mode != modCOLD){
         Mode = modCOLD;
-        PumperOffDelay = 10;
-        W4OffDelay     = 20;
-        FanOffDelay    = 30;
+        PumperOffDelay = 1;
+        W4OffDelay     = 2;
+        FanOffDelay    = 3;
         }
 }
 
@@ -319,9 +319,9 @@ VOID SwitchToOff( VOID)
 {
     if (Mode != modOFF){
         Mode = modOFF;
-        PumperOffDelay = 10;
-        W4OffDelay     = 20;
-        FanOffDelay    = 30;
+        PumperOffDelay = 1;
+        W4OffDelay     = 2;
+        FanOffDelay    = 3;
         }
 }
 
@@ -329,16 +329,16 @@ VOID SwitchPumperOn( VOID)
 {
     if (!PumperOn){
         PumperOn = TRUE;
-        PumperOffDelay = 600;
+        PumperOffDelay = 60;
         }
 }
 
 VOID SwitchPumperOff( VOID)
 {
     if ( PumperOn){
-        if ( W4OffDelay < 120) W4OffDelay = 120;
-        if ( FanOffDelay < 300) FanOffDelay = 500;
-        if ( PumperDelay < 600) PumperDelay = 600;
+        if ( W4OffDelay < 12) W4OffDelay = 12;
+        if ( FanOffDelay < 30) FanOffDelay = 50;
+        if ( PumperDelay < 60) PumperDelay = 60;
         PumperOn = FALSE;
         }
 }
@@ -346,7 +346,7 @@ VOID SwitchPumperOff( VOID)
 VOID SwitchFanOff( VOID)
 {
     if ( FanSpeed != 0){
-        if ( FanDelay < 30) FanDelay = 30;
+        if ( FanDelay < 3) FanDelay = 3;
         FanSpeed = 0;
         }
 }
@@ -354,13 +354,13 @@ VOID SwitchFanOff( VOID)
 VOID SwitchFanOn( BYTE ASpeed)
 {
     if ( FanSpeed != ASpeed){
-        if ( ASpeed == 0) if ( FanDelay < 30) FanDelay = 30;
+        if ( ASpeed == 0) if ( FanDelay < 3) FanDelay = 3;
         else {
-            FanChangeDelay = 60;
+            FanChangeDelay = 6;
             if ( FanSpeed == 0){
-                if ( FanOffDelay < 60) FanOffDelay = 60;
-                if ( W4Delay < 30) W4Delay = 30;
-                if ( PumperDelay < 600) PumperDelay = 600;
+                if ( FanOffDelay < 6) FanOffDelay = 6;
+                if ( W4Delay < 3) W4Delay = 3;
+                if ( PumperDelay < 60) PumperDelay = 60;
                 }
             }
         FanSpeed = ASpeed;
@@ -370,8 +370,8 @@ VOID SwitchFanOn( BYTE ASpeed)
 VOID SwitchW4On( VOID)
 {
     if ( !W4On){
-        if (PumperDelay < 60) PumperDelay = 60;
-        W4OffDelay = 60;
+        if (PumperDelay < 6) PumperDelay = 6;
+        W4OffDelay = 6;
         W4On = TRUE;
         }
 }
@@ -379,10 +379,22 @@ VOID SwitchW4On( VOID)
 VOID SwitchW4Off( VOID)
 {
     if ( W4On){
-        if ( FanOffDelay < 300) FanOffDelay = 300;
-        if ( W4Delay < 30) W4Delay = 30;
+        if ( FanOffDelay < 30) FanOffDelay = 30;
+        if ( W4Delay < 3) W4Delay = 3;
         W4On = FALSE;
         }
+}
+
+VOID TimeAdvance( VOID)
+{
+    TimeAdvanceReq = FALSE;
+    if ( PumperDelay > 0) PumperDelay--;
+    if ( PumperOffDelay > 0) PumperOffDelay--;
+    if ( FanDelay > 0) FanDelay--;
+    if ( FanOffDelay > 0) FanOffDelay--;
+    if ( FanChangeDelay > 0) FanChangeDelay--;
+    if ( W4Delay > 0) W4Delay--;
+    if ( W4OffDelay > 0) W4OffDelay--;
 }
 
 VOID Process( VOID)
@@ -393,7 +405,7 @@ VOID Process( VOID)
             if (( PumperDelay == 0) && ( FanSpeed != 0) && ( W4On)) SwitchPumperOn();
             else SwitchPumperOff();
 
-            if ( FanDelay == 0){
+            if ( FanDelay == 0) {
                 if (( ReqTemp - CurrentTemp) > 6){
                     if ( FanChangeDelay == 0) SwitchFanOn( 3);
                     }
@@ -443,33 +455,33 @@ VOID Process( VOID)
     default:
         if ( PumperOn){
             SwitchPumperOff();
-            FanOffDelay = 20;
-            W4OffDelay = 10;
+            FanOffDelay = 2;
+            W4OffDelay = 1;
             }
 
         if (( W4On) && (W4OffDelay == 0)){
             SwitchW4Off();
-            FanOffDelay = 10;
+            FanOffDelay = 1;
             }
 
         if (( FanSpeed != 0) && ( FanOffDelay == 0)) SwitchFanOn( 0);
     }
 }
 
-*/
-
 main()
 {
     BYTE I;
 
+    IE0 = 0;                /* clear External 0 interrupt request */
 	IP = 0x03;              /* set high intrrupt priorery to timer0 and external interrupt0 */
 	IT0 = 1;                /* Interrupt 0 by edge */
 	TMOD = 0x12;            /* mode 2 for timer 0 (reload 8 Bit) , made 1 for timer 1 (16 Bit counter)*/
 	TL0 = CLOCKTIMERPERIOD; /* set timer0 period */
 	TH0 = CLOCKTIMERPERIOD; /* set timer0 reload period */
-	TR0 = 0;//1                /* start timer0 */
+	TR0 = 1;                /* start timer0 */
 	ET0 = 1;                /* enable timer 0 interrupt */
-	EX0 = 1;//1                   /* enable External 0 interrupt */
+	EX0 = 1;                /* enable External 0 interrupt */
+    EA = 1;                 /* global interrupt enable */
 
     for (I=0;I<5;I++){
         INDUCATOR1 = 0;
@@ -479,21 +491,24 @@ main()
         }
     Delay(- 30000);
 
-    IE0 = 0;
-    EA = 1;                 /* global interrupt enable */
 
     PINPUT = 1;
     NINPUT = 1;
 
     while (TRUE) {
-       P1 = (((~(ReadTemperature())) << 2) | 0x03);
+       INDUCATOR2 = ~ValidData;
+       if ( TimeAdvanceReq) {
+           TimeAdvance();
+           CurrentTemp = ReadTemperature();
+           P1 = (((~( CurrentTemp)) << 2) | 0x03);
+           };
+       Process();
+       // P1 = (((~( ReadTemperature())) << 2) | 0x03);
        /*
        if ( NewDataRescived){
            DisplayData();
            NewDataRescived = FALSE;
            }
        */
-       INDUCATOR2 = ~ValidData;
-       // Process();
        }
 }
