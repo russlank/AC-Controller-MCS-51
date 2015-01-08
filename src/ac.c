@@ -243,6 +243,7 @@ VOID DisplayData( VOID)
 }
 */
 
+/*
 VOID SwitchToHot( VOID)
 {
     if (Mode != modHEAT){
@@ -252,7 +253,9 @@ VOID SwitchToHot( VOID)
         FanOffDelay    = SECUND( 30);
         }
 }
+*/
 
+/*
 VOID SwitchToCold( VOID)
 {
     if (Mode != modCOOL){
@@ -262,7 +265,9 @@ VOID SwitchToCold( VOID)
         FanOffDelay    = SECUND( 30);
         }
 }
+*/
 
+/*
 VOID SwitchToFan( VOID)
 {
     if (Mode != modFAN){
@@ -272,6 +277,7 @@ VOID SwitchToFan( VOID)
         FanOffDelay    = SECUND( 30);
         }
 }
+*/
 
 VOID SwitchToOff( VOID)
 {
@@ -328,27 +334,20 @@ VOID SwitchFanSpeed( BYTE ASpeed)
                 }
             }
         FanSpeed = ASpeed;
+        FANMID = FALSE;
+        FANHIG = FALSE;
+        FANLOW = FALSE;
         switch ( FanSpeed) {
             case 1:
-                FANMID = FALSE;
-                FANHIG = FALSE;
                 FANLOW = TRUE;
                 break;
             case 2:
-                FANLOW = FALSE;
-                FANHIG = FALSE;
                 FANMID = TRUE;
                 break;
             case 3:
-                FANLOW = FALSE;
-                FANMID = FALSE;
                 FANHIG = TRUE;
-                break;
-            default:
-                FANLOW = FALSE;
-                FANMID = FALSE;
-                FANHIG = FALSE;
             }
+
         }
 }
 
@@ -425,23 +424,7 @@ VOID Process( VOID)
                     else SwitchPumperOff();
 
                     FanProcess( ReqTemp - CurrentTemp, Continuous);
-                    /*
-                    if ( FanDelay == SECUND( 0)) {
-                        if (Continuous == TRUE){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else if (( ReqTemp - CurrentTemp) > 6){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
-                            }
-                        else if (( ReqTemp - CurrentTemp) > 3){
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
-                            }
-                        else {
-                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
-                            }
-                        }
-                    else SwitchFanSpeed( 0);
-                    */
+
                     if (( W4Delay == SECUND( 0)) && ( FanSpeed != 0)) SwitchW4On();
                     else SwitchW4Off();
                     }
@@ -463,6 +446,7 @@ VOID Process( VOID)
                     else SwitchPumperOff();
 
                     FanProcess( CurrentTemp - ReqTemp, Continuous);
+
                     }
                 else {
                     if ( PumperOffDelay == SECUND( 0)) {
@@ -502,78 +486,82 @@ VOID Process( VOID)
         }
 }
 
+WORD _RetriveTime( BYTE *ATime)
+{
+    {
+        register BYTE Hours = *(ATime + 1);
+        register BYTE BTime = (Hours & 0x0f);
+        if (( Hours & 0x10) != 0x00) BTime += 10;
+        if (( Hours & 0x80) != 0x00) BTime += 12;
+        {
+            register BYTE Minutes = *ATime;
+            Minutes += ( Minutes & 0x0f) + ((Minutes >> 4) * 10);
+            return ( ((WORD)BTime * 60) + Minutes);
+            }
+        }
+}
+
 VOID ProcessRecivedData()
 {
     if ((RemuteData[0] & 0x08) != 0x00) SwitchToOn();
     else SwitchToOff();
-    // OnOff =
-    switch (RemuteData[0] & 0x03){
-        case 0x00:
-            SwitchToCold();
-            // Mode = modCOOL;
-            break;
-        case 0x01:
-            // Mode = modDRY;
-            break;
-        case 0x02:
-            // Mode = modFAN;
-            SwitchToFan();
-            break;
-        default:
-            SwitchToHot();
-            // Mode = modHEAT;
-            break;
-        }
+
     {
-        BYTE Temp = RemuteData[5] & 0x0f;
+        register BYTE NewMode;
+        switch (RemuteData[0] & 0x03){
+            case 0x00:
+                NewMode = modCOOL;
+                break;
+            case 0x01:
+                // Mode = modDRY;
+                break;
+            case 0x02:
+                NewMode = modFAN;
+                break;
+            default:
+                NewMode = modHEAT;
+            }
+
+        if ( NewMode != Mode){
+            Mode = NewMode;
+            PumperOffDelay = SECUND( 10);
+            W4OffDelay     = SECUND( 20);
+            FanOffDelay    = SECUND( 30);
+            }
+        }
+
+    {
+        register BYTE Temp = RemuteData[5] & 0x0f;
         switch (Temp){
            case 0x00:
            case 0x0E:
            case 0x0F:
                Continuous = TRUE;
-               ReqTemp = 0;
+               // ReqTemp = 0;
                break;
            default:
                Continuous = FALSE;
                ReqTemp = Temp + 17;
            }
         }
-    {
-        BYTE TempFanMode = RemuteData[0] & 0x30;
-        switch ( TempFanMode){
-           case 0x10:
-               FanMode = fanmHIG;
-               break;
-           case 0x20:
-               FanMode = fanmMID;
-               break;
-           case 0x30:
-               FanMode = fanmLOW;
-               break;
-           default:
-               FanMode = fanmAUTO;
-           }
+
+    switch ( RemuteData[0] & 0x30){
+        case 0x10:
+            FanMode = fanmHIG;
+            break;
+        case 0x20:
+            FanMode = fanmMID;
+            break;
+        case 0x30:
+            FanMode = fanmLOW;
+            break;
+        default:
+            FanMode = fanmAUTO;
         }
-    {
-        register WORD CurrentTime = 0;
-        register WORD SettingTime = 0;
+    Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
+    if ( Timer > (24 * 60)) Timer -= (24 * 60);
+    Timer *= SECUND( 60);
 
-        if (( RemuteData[2] & 0x10) == 0x10) CurrentTime = 10;
-        CurrentTime += (RemuteData[2] & 0x0f);
-        if (( RemuteData[2] & 0x80) == 0x80) CurrentTime += 12;
-        CurrentTime *= 60;
-        CurrentTime += ( RemuteData[1] & 0x0f) + ((( RemuteData[1] & 0xf0) >> 4) * 10);
-
-        if (( RemuteData[4] & 0x10) == 0x10) SettingTime = 10;
-        SettingTime += (RemuteData[4] & 0x0f);
-        if (( RemuteData[4] & 0x80) == 0x80) SettingTime += 12;
-        SettingTime *= 60;
-        SettingTime += ( RemuteData[3] & 0x0f) + ((( RemuteData[3] & 0xf0) >> 4) * 10);
-
-        if ( CurrentTime <= SettingTime) Timer = SettingTime - CurrentTime;
-        else Timer = 24 * 60 - CurrentTime + SettingTime;
-        Timer *= SECUND( 60);
-        }
 }
 
 main()
@@ -599,6 +587,7 @@ main()
 	EX0 = 1;                /* enable External 0 interrupt */
     EA = 1;                 /* global interrupt enable */
 
+    /*
     for (I=0;I<5;I++){
         INDUCATOR1 = 0;
         Delay(- 30000);
@@ -606,6 +595,7 @@ main()
         Delay(- 30000);
         }
     Delay(- 30000);
+    */
 
     while (TRUE) {
        if (( NewDataRescived) && ( ValidData)) {
