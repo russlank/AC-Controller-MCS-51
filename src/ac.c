@@ -23,7 +23,6 @@
 #define TIMESTEP            5
 #define SECUND( X)          ((X) / TIMESTEP)
 
-
 sbit CAP            = P1^0;
 sbit OPAMP          = P3^6;
 sbit PINPUT         = P1^0;
@@ -40,22 +39,22 @@ sbit INDUCATOR2     = P3^4;
 sbit INDUCATOR3     = P3^5;
 
 #define modNONE     0
-#define modCOLD     1
-#define modHOT      2
+#define modCOOL     1
+#define modHEAT     2
 #define modDRY      3
 #define modFAN      4
 
 WORD TimeCounter        = 0;
 BYTE SecsCounter        = 0;
 BYTE RemuteData[6];
-BYTE PumperDelay        = SECUND(600);
-BYTE PumperOffDelay     = SECUND(0);
-BYTE FanDelay           = SECUND(60);
-BYTE FanOffDelay        = SECUND(0);
-BYTE FanChangeDelay     = SECUND(0);
-BYTE W4Delay            = SECUND(120);
-BYTE W4OffDelay         = SECUND(0);
-BYTE Mode               = modCOLD;
+BYTE PumperDelay        = SECUND( 600);
+BYTE PumperOffDelay     = SECUND( 0);
+BYTE FanDelay           = SECUND( 60);
+BYTE FanOffDelay        = SECUND( 0);
+BYTE FanChangeDelay     = SECUND( 0);
+BYTE W4Delay            = SECUND( 120);
+BYTE W4OffDelay         = SECUND( 0);
+BYTE Mode               = modCOOL;
 BOOL OnOff              = FALSE;
 BOOL PumperOn           = FALSE;
 BOOL W4On               = FALSE;
@@ -71,8 +70,8 @@ BOOL TimeAdvanceReq = FALSE;
 TIMER0
 {
     TimeCounter += 12;
-    if ( TimeCounter >= 4000/* (4000 * CLOCKSPEED) */){
-        TimeCounter -= 4000/* (4000 * CLOCKSPEED) */;
+    if ( TimeCounter >= 8000/* (4000 * CLOCKSPEED) */){
+        TimeCounter -= 8000/* (4000 * CLOCKSPEED) */;
         SecsCounter ++;
         if ( SecsCounter >= TIMESTEP){
             SecsCounter = 0;
@@ -114,9 +113,9 @@ InfraRead0() interrupt 0 using 3
     PulseWidth = MeasurePW( 1);
     if (PulseWidth == 0xffff) goto Finish;
 
-	for ( I=0;I<6;I++){
+	for ( I = 0; I < 6; I++){
         RemuteData[I] = 0x00;
-        for ( J=0; J<8; J++) {
+        for ( J = 0; J < 8; J++) {
             PulseWidth = MeasurePW( 0);
             if (PulseWidth == 0xffff) goto Finish;
             PulseWidth = MeasurePW( 1);
@@ -128,7 +127,7 @@ InfraRead0() interrupt 0 using 3
 
     Extra = 0x00;
 
-    for ( J=0;J<4;J++) {
+    for ( J = 0; J < 4; J++) {
         PulseWidth = MeasurePW( 0);
         if (PulseWidth == 0xffff) goto Finish;
         PulseWidth = MeasurePW( 1);
@@ -237,21 +236,21 @@ VOID DisplayData( VOID)
 
 VOID SwitchToHot( VOID)
 {
-    if (Mode != modHOT){
-        Mode = modHOT;
-        PumperOffDelay = SECUND(10);
-        W4OffDelay     = SECUND(20);
-        FanOffDelay    = SECUND(30);
+    if (Mode != modHEAT){
+        Mode = modHEAT;
+        PumperOffDelay = SECUND( 10);
+        W4OffDelay     = SECUND( 20);
+        FanOffDelay    = SECUND( 30);
         }
 }
 
 VOID SwitchToCold( VOID)
 {
-    if (Mode != modCOLD){
-        Mode = modCOLD;
-        PumperOffDelay = SECUND(10);
-        W4OffDelay     = SECUND(20);
-        FanOffDelay    = SECUND(30);
+    if (Mode != modCOOL){
+        Mode = modCOOL;
+        PumperOffDelay = SECUND( 10);
+        W4OffDelay     = SECUND( 20);
+        FanOffDelay    = SECUND( 30);
         }
 }
 
@@ -259,9 +258,9 @@ VOID SwitchToOff( VOID)
 {
     if (OnOff == TRUE){
         OnOff = FALSE;
-        PumperOffDelay = SECUND(10);
-        W4OffDelay     = SECUND(20);
-        FanOffDelay    = SECUND(30);
+        PumperOffDelay = SECUND( 10);
+        W4OffDelay     = SECUND( 20);
+        FanOffDelay    = SECUND( 30);
         }
 }
 
@@ -269,55 +268,44 @@ VOID SwitchToOn( VOID)
 {
     if (OnOff == FALSE){
         OnOff = TRUE;
-        PumperOffDelay = SECUND(10);
-        W4OffDelay     = SECUND(20);
-        FanOffDelay    = SECUND(30);
+        PumperOffDelay = SECUND( 10);
+        W4OffDelay     = SECUND( 20);
+        FanOffDelay    = SECUND( 30);
         }
 }
 
 VOID SwitchPumperOn( VOID)
 {
-    if (!PumperOn){
+    if ( PumperOn == FALSE){
         PumperOn = TRUE;
-        PumperOffDelay = SECUND(600);
+        PumperOffDelay = SECUND( 600);
         PUMPER = TRUE;
         }
 }
 
 VOID SwitchPumperOff( VOID)
 {
-    if ( PumperOn){
-        if ( W4OffDelay < SECUND(120)) W4OffDelay = SECUND(120);
-        if ( FanOffDelay < SECUND(300)) FanOffDelay = SECUND(300);
-        if ( PumperDelay < SECUND(600)) PumperDelay = SECUND(600);
+    if ( PumperOn == TRUE){
+        if ( W4OffDelay < SECUND( 120)) W4OffDelay = SECUND( 120);
+        if ( FanOffDelay < SECUND( 300)) FanOffDelay = SECUND( 300);
+        if ( PumperDelay < SECUND( 600)) PumperDelay = SECUND( 600);
         PumperOn = FALSE;
         PUMPER = FALSE;
         }
 }
 
-/*
-VOID SwitchFanOff( VOID)
-{
-    if ( FanSpeed != 0){
-        if ( FanDelay < 3) FanDelay = 3;
-        FanSpeed = 0;
-        FANLOW = FALSE;
-        FANMID = FALSE;
-        FANHIG = FALSE;
-        }
-}
-*/
-
-VOID SwitchFanOn( BYTE ASpeed)
+VOID SwitchFanSpeed( BYTE ASpeed)
 {
     if ( FanSpeed != ASpeed){
-        if ( ASpeed == 0) if ( FanDelay < SECUND(30)) FanDelay = SECUND(30);
+        if ( ASpeed == 0) {
+            if ( FanDelay < SECUND( 30)) FanDelay = SECUND( 30);
+            }
         else {
-            FanChangeDelay = SECUND(60);
+            FanChangeDelay = SECUND( 60);
             if ( FanSpeed == 0){
-                if ( FanOffDelay < SECUND(60)) FanOffDelay = SECUND(60);
-                if ( W4Delay < SECUND(30)) W4Delay = SECUND(30);
-                if ( PumperDelay < SECUND(600)) PumperDelay = SECUND(600);
+                if ( FanOffDelay < SECUND( 60)) FanOffDelay = SECUND( 60);
+                if ( W4Delay < SECUND( 120)) W4Delay = SECUND( 120);
+                if ( PumperDelay < SECUND( 600)) PumperDelay = SECUND( 600);
                 }
             }
         FanSpeed = ASpeed;
@@ -347,9 +335,9 @@ VOID SwitchFanOn( BYTE ASpeed)
 
 VOID SwitchW4On( VOID)
 {
-    if ( !W4On){
-        if (PumperDelay < SECUND(60)) PumperDelay = SECUND(60);
-        W4OffDelay = SECUND(60);
+    if ( W4On == FALSE){
+        if (PumperDelay < SECUND( 60)) PumperDelay = SECUND( 60);
+        W4OffDelay = SECUND( 60);
         W4On = TRUE;
         W4 = TRUE;
         }
@@ -357,9 +345,9 @@ VOID SwitchW4On( VOID)
 
 VOID SwitchW4Off( VOID)
 {
-    if ( W4On){
-        if ( FanOffDelay < SECUND(300)) FanOffDelay = SECUND(300);
-        if ( W4Delay < SECUND(30)) W4Delay = SECUND(30);
+    if ( W4On == TRUE){
+        if ( FanOffDelay < SECUND( 300)) FanOffDelay = SECUND( 300);
+        if ( W4Delay < SECUND( 30)) W4Delay = SECUND( 30);
         W4On = FALSE;
         W4 = FALSE;
         }
@@ -368,74 +356,74 @@ VOID SwitchW4Off( VOID)
 VOID TimeAdvance( VOID)
 {
     TimeAdvanceReq = FALSE;
-    if ( PumperDelay > SECUND(0)) PumperDelay -= SECUND(TIMESTEP);
-    if ( PumperOffDelay > SECUND(0)) PumperOffDelay -= SECUND(TIMESTEP);
-    if ( FanDelay > SECUND(0)) FanDelay -= SECUND(TIMESTEP);
-    if ( FanOffDelay > SECUND(0)) FanOffDelay -= SECUND(TIMESTEP);
-    if ( FanChangeDelay > SECUND(0)) FanChangeDelay -= SECUND(TIMESTEP);
-    if ( W4Delay > SECUND(0)) W4Delay -= SECUND(TIMESTEP);
-    if ( W4OffDelay > SECUND(0)) W4OffDelay -= SECUND(TIMESTEP);
+    if ( PumperDelay > SECUND( 0)) PumperDelay -= SECUND( TIMESTEP);
+    if ( PumperOffDelay > SECUND( 0)) PumperOffDelay -= SECUND( TIMESTEP);
+    if ( FanDelay > SECUND( 0)) FanDelay -= SECUND( TIMESTEP);
+    if ( FanOffDelay > SECUND( 0)) FanOffDelay -= SECUND( TIMESTEP);
+    if ( FanChangeDelay > SECUND( 0)) FanChangeDelay -= SECUND( TIMESTEP);
+    if ( W4Delay > SECUND( 0)) W4Delay -= SECUND( TIMESTEP);
+    if ( W4OffDelay > SECUND( 0)) W4OffDelay -= SECUND( TIMESTEP);
 }
 
 VOID Process( VOID)
 {
     if ( OnOff) {
         switch ( Mode){
-            case modHOT:
+            case modHEAT:
                 if ( CurrentTemp < ReqTemp){
-                    if (( PumperDelay == SECUND(0)) && ( FanSpeed != 0) && ( W4On)) SwitchPumperOn();
+                    if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0) && ( W4On == TRUE)) SwitchPumperOn();
                     else SwitchPumperOff();
 
-                    if ( FanDelay == SECUND(0)) {
+                    if ( FanDelay == SECUND( 0)) {
                         if (( ReqTemp - CurrentTemp) > 6){
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 3);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
                             }
                         else if (( ReqTemp - CurrentTemp) > 3){
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 2);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
                             }
                         else {
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 1);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
                             }
                         }
-                    else SwitchFanOn( 0);
+                    else SwitchFanSpeed( 0);
 
-                    if (( W4Delay == SECUND(0)) && ( FanSpeed != 0)) SwitchW4On();
+                    if (( W4Delay == SECUND( 0)) && ( FanSpeed != 0)) SwitchW4On();
                     else SwitchW4Off();
                     }
                 else {
-                    if ( PumperOffDelay == SECUND(0)) {
+                    if ( PumperOffDelay == SECUND( 0)) {
                         SwitchPumperOff();
-                        if ( W4OffDelay == SECUND(0)){
+                        if ( W4OffDelay == SECUND( 0)){
                             SwitchW4Off();
-                            if ( FanOffDelay == SECUND(0)) SwitchFanOn( 0);
+                            if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
                             }
                         }
                     }
                 break;
-            case modCOLD:
+            case modCOOL:
                 if ( W4On) SwitchW4Off();
                 if ( CurrentTemp > ReqTemp){
-                    if (( PumperDelay == SECUND(0)) && ( FanSpeed != 0)) SwitchPumperOn();
+                    if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0)) SwitchPumperOn();
                     else SwitchPumperOff();
 
-                    if ( FanDelay == SECUND(0)){
+                    if ( FanDelay == SECUND( 0)){
                         if (( CurrentTemp - ReqTemp) > 6){
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 3);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
                             }
                         else if (( CurrentTemp - ReqTemp) > 3){
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 2);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
                             }
                         else {
-                            if ( FanChangeDelay == SECUND(0)) SwitchFanOn( 1);
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
                             }
                         }
-                    else SwitchFanOn( 0);
+                    else SwitchFanSpeed( 0);
 
                     }
                 else {
-                    if ( PumperOffDelay == SECUND(0)) {
+                    if ( PumperOffDelay == SECUND( 0)) {
                         SwitchPumperOff();
-                        if ( FanOffDelay == SECUND(0)) SwitchFanOn( 0);
+                        if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
                         };
                     }
                 break;
@@ -444,16 +432,16 @@ VOID Process( VOID)
     else {
         if ( PumperOn){
             SwitchPumperOff();
-            FanOffDelay = SECUND(20);
-            W4OffDelay = SECUND(10);
+            FanOffDelay = SECUND( 20);
+            W4OffDelay = SECUND( 10);
             }
 
-        if (( W4On) && (W4OffDelay == SECUND(0))){
+        if (( W4On) && (W4OffDelay == SECUND( 0))){
             SwitchW4Off();
-            FanOffDelay = SECUND(10);
+            FanOffDelay = SECUND( 10);
             }
 
-        if (( FanSpeed != 0) && ( FanOffDelay == SECUND(0))) SwitchFanOn( 0);
+        if (( FanSpeed != 0) && ( FanOffDelay == SECUND( 0))) SwitchFanSpeed( 0);
         }
 }
 
@@ -467,7 +455,7 @@ VOID ProcessRecivedData()
     switch (RemuteData[0] & 0x03){
         case 0x00:
             SwitchToCold();
-            // Mode = modCOLD;
+            // Mode = modCOOL;
             break;
         case 0x01:
             // Mode = modDRY;
@@ -477,7 +465,7 @@ VOID ProcessRecivedData()
             break;
         default:
             SwitchToHot();
-            // Mode = modHOT;
+            // Mode = modHEAT;
             break;
         }
     {
