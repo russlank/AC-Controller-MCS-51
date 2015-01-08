@@ -1,6 +1,8 @@
 #include <reg51.h>
 // #include <intrins.h>
 
+// #define _DEBUG_
+
 #define CLOCKSPEED      8
 // 8 MHz.
 
@@ -24,27 +26,32 @@
 #define TIMESTEP            5
 #define SECUND( X)          (( X) / TIMESTEP)
 
-sbit CAP            = P1^0;
-sbit OPAMP          = P3^6;
-sbit PINPUT         = P1^0;
-sbit NINPUT         = P1^1;
+
+sbit OPAMP_OUTPUT   = P3^6;
 sbit INFRAINPUT	    = P3^2;
+
 sbit PUMPER         = P1^7;
 sbit W4             = P1^6;
 sbit FANLOW         = P1^5;
 sbit FANMID         = P1^4;
 sbit FANHIG         = P1^3;
 sbit SWING          = P1^2;
+sbit N_INPUT        = P1^1;
+sbit P_INPUT        = P1^0;
+sbit CAP            = P1^0;
 
+#ifdef _DEBUG_
 sbit INDUCATOR1     = P3^0;
 sbit INDUCATOR2     = P3^4;
 sbit INDUCATOR3     = P3^5;
+#endif
 
-#define modNONE     0
-#define modCOOL     1
-#define modHEAT     2
-#define modDRY      3
-#define modFAN      4
+
+#define modCOOL     0
+#define modDRY      1
+#define modFAN      2
+#define modHEAT     3
+#define modNONE     4
 
 #define fanmAUTO    0
 #define fanmLOW     1
@@ -74,7 +81,10 @@ BYTE FanSpeed           = 0;
 BYTE ReqTemp            = 20;
 BYTE CurrentTemp        = 20;
 
+#ifdef _DEBUG_
 BOOL ValidData = FALSE;
+#endif
+
 BOOL NewDataRescived = FALSE;
 BOOL TimeAdvanceReq = FALSE;
 
@@ -93,22 +103,20 @@ TIMER0
 
 BYTE MeasurePW( BOOL Value)
 {
-    TR1 = 0;
-    TF1 = 0;
-	TH1 = 0x00;
-    TL1 = 0x00;
-    TR1 = 1;
-    if (Value == 1) while ((INFRAINPUT == 1) && (TF1 == 0));
-    else while ((INFRAINPUT == 0) && (TF1 == 0));
-    TR1 = 0;
-    if (TF1 == 0) return TH1;
-    else return (0xff);
-        /*
-        register WORD Width;
-	    *( BYTE *)((( BYTE *)(&Width)) + 0) = TH1;
-        *( BYTE *)((( BYTE *)(&Width)) + 1) = TL1;
-        return Width;
-        */
+    TR1 = 0; // Stop timer if it is running
+    TF1 = 0; // Clear timer overflow flag
+	TH1 = 0x00; // Load timer high order value
+    TL1 = 0x00; // Load timer low order value
+    TR1 = 1; // Start timer
+    if (Value == 1)
+        while ((INFRAINPUT == 1) && (TF1 == 0)); // Wait until pulse input becames 0, or timer overflows
+    else
+        while ((INFRAINPUT == 0) && (TF1 == 0)); // Wait until pulse input becames 1, or timer overflows
+    TR1 = 0; // Stop timer to read its value
+    if (TF1 == 0) // If timer hasn`t overflowed
+        return TH1; // Return the high order timer value
+    else
+        return (0xff); // Return (0xff) indicating that overflow has ocured
 }
 
 InfraRead0() interrupt 0 using 3
@@ -116,8 +124,11 @@ InfraRead0() interrupt 0 using 3
 	register BYTE PulseWidth;
 	register BYTE I, J, Extra;
 
+#ifdef _DEBUG_
     INDUCATOR3 = 0;
     ValidData = FALSE;
+#endif
+    NewDataRescived = FALSE;
 
     PulseWidth = MeasurePW( 0);
     if (PulseWidth == 0xff) goto Finish;
@@ -125,41 +136,48 @@ InfraRead0() interrupt 0 using 3
     PulseWidth = MeasurePW( 1);
     if (PulseWidth == 0xff) goto Finish;
 
-	for ( I = 0; I < 6; I++){
-        RemuteData[I] = 0x00;
-        for ( J = 0; J < 8; J++) {
-            PulseWidth = MeasurePW( 0);
-            if (PulseWidth == 0xff) goto Finish;
-            PulseWidth = MeasurePW( 1);
-            if (PulseWidth == 0xff) goto Finish;
-		    RemuteData[I] = RemuteData[I] >> 1;
-		    if (PulseWidth > TIMETHREASHOULD) RemuteData[I] = RemuteData[I] | 0x80;
+	for ( I = 0; I < 6; I++){ // Loop for 6 bytes of data
+        RemuteData[I] = 0x00; // Reset the data byte
+        for ( J = 0; J < 8; J++) { // Loop for 8 bits for each byte of data
+            PulseWidth = MeasurePW( 0); // Wait until 0 finished
+            if (PulseWidth == 0xff) goto Finish; // If 0 has taken long time skip infra data input
+            PulseWidth = MeasurePW( 1); // Measure 1 pulse time
+            if (PulseWidth == 0xff) goto Finish; // If 1 has taken long time skip infra data input
+		    RemuteData[I] = RemuteData[I] >> 1; // Get room for new bit of data
+		    if (PulseWidth > TIMETHREASHOULD) RemuteData[I] = RemuteData[I] | 0x80; // Set bit value according to 1 pulse width
             }
 		}
 
-    Extra = 0x00;
+    Extra = 0x00; // Reset the verify data byte
 
-    for ( J = 0; J < 4; J++) {
-        PulseWidth = MeasurePW( 0);
-        if (PulseWidth == 0xff) goto Finish;
-        PulseWidth = MeasurePW( 1);
-        if (PulseWidth == 0xff) goto Finish;
-		Extra = Extra >> 1;
-		if (PulseWidth > TIMETHREASHOULD) Extra = Extra | 0x80;
+    for ( J = 0; J < 4; J++) { // Loop for 4 bits of verify data
+        PulseWidth = MeasurePW( 0); // Wait until 0 finished
+        if (PulseWidth == 0xff) goto Finish; // If 0 has taken long time skip infra data input
+        PulseWidth = MeasurePW( 1); // Measure 1 pulse time
+        if (PulseWidth == 0xff) goto Finish; // If 1 has taken long time skip infra data input
+		Extra = Extra >> 1; // Get room for new bit of data
+		if (PulseWidth > TIMETHREASHOULD) Extra = Extra | 0x80; // Set bit value according to 1 pulse width
         }
-    MeasurePW( 0);
-    if (( Extra == 0x20) && (( RemuteData[5] & 0xf0) == 0x20) ){
-        ValidData = TRUE;
-        NewDataRescived = TRUE;
+    MeasurePW( 0);  // Wait until 0 finished
+
+    if (( Extra == 0x20) && (( RemuteData[5] & 0xf0) == 0x20) ){ // Verify the data integrity
+#ifdef _DEBUG_
+        ValidData = TRUE; // Set ~ValidData~ flag to true indicating to correct infra data recived
+#endif
+        NewDataRescived = TRUE; // Set ~NewDataRescived~ flag to true indicating to new infra data recived
         };
 Finish:
+#ifdef _DEBUG_
     INDUCATOR3 = 1;
-    TF1 = 1;
-	IE0 = 0;
+#endif
+    TF1 = 1; // Set timer overflow flag on to protect another time measurments actions from blocking
+	IE0 = 0; // Clear another interrupt requests that occured by series of pulses
 }
 
 
-/*
+
+#ifdef _DEBUG_
+
 void Delay( INT ATime)
 {
     TF1 = 0;
@@ -168,47 +186,47 @@ void Delay( INT ATime)
     TR1 = 1;
 	while (!TF1);
 }
-*/
+
+#endif
 
 
 BYTE ReadTemperature_( VOID)
 {
     WORD Time;
-    CAP = 0;
-
-    TF1 = 0;
-	TH1 = 0x00;
-    TL1 = 0x00;
-    TR1 = 1;
-	while (TF1 == 0);
-    TR1 = 0;
-    /*
-    Delay( - 30000);
-    Delay( - 30000);
-    Delay( - 30000);
-    Delay( - 30000);
-    */
-    TF1 = 0;
-	TH1 = 0x00;
-    TL1 = 0x00;
-    INDUCATOR1 = 0;
-    CAP = 1;
-    TR1 = 1;
-    while ((OPAMP == 0) && (TF1 == 0));
-    TR1 = 0;
-    CAP = 0;
-    INDUCATOR1 = 1;
-    if ( TF1 == 0) {
-	    *( BYTE *)((( BYTE *)(&Time)) + 0) = TH1;
-        *( BYTE *)((( BYTE *)(&Time)) + 1) = TL1;
-        Time = (( Time >> 7) & 0x00ff);
-        return (*( BYTE *)((( BYTE *)(&Time)) + 1));
+    CAP = 0; // Start capacitor discharging
+    TF1 = 0; // Clear timer overflow flag
+	TH1 = 0x00; // Load timer high order value
+    TL1 = 0x00; // Load timer low order value
+    TR1 = 1; // Start timer
+	while (TF1 == 0); // Wait until overfloaw
+    TR1 = 0; // Stop timer ???
+    TF1 = 0; // Clear timer overflow flag
+	TH1 = 0x00; // Load timer high order value
+    TL1 = 0x00; // Load timer low order value
+#ifdef _DEBUG_
+    INDUCATOR1 = 0; // Switch on temperature measurment inducator
+#endif
+    CAP = 1; // Start capacitor charging
+    TR1 = 1; // Start timer to measure charging time
+    while ((OPAMP_OUTPUT == 0) && (TF1 == 0)); // Wait until capacitor
+    // voltage reachs mesured voltage or timer overflows
+    TR1 = 0; // Stop timer to read its value
+    CAP = 0; // Start capacitor discharging
+#ifdef _DEBUG_
+    INDUCATOR1 = 1; // Switch off temperature measurment inducator
+#endif
+    if ( TF1 == 0) { // If timer overflow hasn`t ocured
+	    *( BYTE *)((( BYTE *)(&Time)) + 0) = TH1; // Get timer high order value
+        *( BYTE *)((( BYTE *)(&Time)) + 1) = TL1; // Get timer low order value
+        Time = (( Time >> 7) & 0x00ff); // Correct the 16 bit value to retrive 8 bit value only
+        return (*( BYTE *)((( BYTE *)(&Time)) + 1)); // Return 8 bit voltage value
         }
-    else return 0x00;
+    else return 0x00; // If timer overflow has ocured
 }
 
 BYTE ReadTemperature( VOID)
 {
+    // Read temperature three times and take the larger value
     BYTE T1 = ReadTemperature_();
     BYTE T2 = ReadTemperature_();
     BYTE T3 = ReadTemperature_();
@@ -300,7 +318,6 @@ VOID _SetOffDelays( VOID)
     W4OffDelay     = SECUND( 20);
     FanOffDelay    = SECUND( 30);
 }
-
 
 VOID SwitchToOff( VOID)
 {
@@ -487,6 +504,7 @@ VOID Process( VOID)
                         };
                     }
                 break;
+            case modDRY:
             case modFAN:
                 if ( W4On == TRUE) SwitchW4Off();
                 if ( PumperOn == TRUE) SwitchPumperOff();
@@ -497,8 +515,6 @@ VOID Process( VOID)
                 else {
                     if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
                     }
-                break;
-            case modDRY:
                 break;
             }
         }
@@ -535,113 +551,117 @@ WORD _RetriveTime( BYTE *ATime)
 
 VOID ProcessRecivedData()
 {
-    if ((RemuteData[0] & 0x08) != 0x00) SwitchToOn();
-    else SwitchToOff();
+    do {
+        NewDataRescived = FALSE; // Clear the flag that new recived data not processed
 
-    {
-        register BYTE NewMode;
-        switch (RemuteData[0] & 0x03){
-            case 0x00:
-                NewMode = modCOOL;
+        if ((RemuteData[0] & 0x08) != 0x00) SwitchToOn();
+        else SwitchToOff();
+        {
+            register BYTE NewMode = RemuteData[0] & 0x03;
+            /*
+            switch (RemuteData[0] & 0x03){
+                case 0x00:
+                    NewMode = modCOOL;
+                    break;
+                case 0x01:
+                    Mode = modDRY;
+                    break;
+                case 0x02:
+                    NewMode = modFAN;
+                    break;
+                default:
+                    NewMode = modHEAT;
+                }
+            */
+            if ( NewMode != Mode){
+                Mode = NewMode;
+                _SetOffDelays();
+                }
+            }
+        SwingOn = TRUE;
+        if (( RemuteData[0] & 0xC0) == 0x00) SwingOn = FALSE;
+        {
+            register BYTE Temp = RemuteData[5] & 0x0f;
+            switch (Temp){
+               case 0x00:
+               case 0x0E:
+               case 0x0F:
+                   Continuous = TRUE;
+                   // ReqTemp = 0;
+                   break;
+               default:
+                   Continuous = FALSE;
+                   ReqTemp = Temp + 17;
+               }
+            }
+        switch ( RemuteData[0] & 0x30){
+            case 0x10:
+                FanMode = fanmHIG;
                 break;
-            case 0x01:
-                // Mode = modDRY;
+            case 0x20:
+                FanMode = fanmMID;
                 break;
-            case 0x02:
-                NewMode = modFAN;
+            case 0x30:
+                FanMode = fanmLOW;
                 break;
             default:
-                NewMode = modHEAT;
+                FanMode = fanmAUTO;
             }
-
-        if ( NewMode != Mode){
-            Mode = NewMode;
-            _SetOffDelays();
-            }
-        }
-
-    SwingOn = TRUE;
-    if (( RemuteData[0] & 0xC0) == 0x00) SwingOn = FALSE;
-
-    {
-        register BYTE Temp = RemuteData[5] & 0x0f;
-        switch (Temp){
-           case 0x00:
-           case 0x0E:
-           case 0x0F:
-               Continuous = TRUE;
-               // ReqTemp = 0;
-               break;
-           default:
-               Continuous = FALSE;
-               ReqTemp = Temp + 17;
-           }
-        }
-
-    switch ( RemuteData[0] & 0x30){
-        case 0x10:
-            FanMode = fanmHIG;
-            break;
-        case 0x20:
-            FanMode = fanmMID;
-            break;
-        case 0x30:
-            FanMode = fanmLOW;
-            break;
-        default:
-            FanMode = fanmAUTO;
-        }
-    Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
-    if ( Timer > (24 * 60)) Timer -= (24 * 60);
-    Timer *= SECUND( 60);
-
+        Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
+        if ( Timer > (24 * 60)) Timer -= (24 * 60);
+        Timer *= SECUND( 60);
+        } while (NewDataRescived == TRUE); // Repeat process new data if there is new data has been recived while processing
 }
 
 main()
 {
-    BYTE I;
-
     PUMPER = FALSE;
     W4 = FALSE;
     FANLOW = FALSE;
     FANMID = FALSE;
     FANHIG = FALSE;
     SWING = FALSE;
-    PINPUT = 1;
-    NINPUT = 1;
+    P_INPUT = 1;
+    N_INPUT = 1;
 
-    IE0 = 0;                /* clear External 0 interrupt request */
-	IP = 0x03;              /* set high intrrupt priorery to timer0 and external interrupt0 */
-	IT0 = 1;                /* Interrupt 0 by edge */
-	TMOD = 0x12;            /* mode 2 for timer 0 (reload 8 Bit) , made 1 for timer 1 (16 Bit counter)*/
-	TL0 = CLOCKTIMERPERIOD; /* set timer0 period */
-	TH0 = CLOCKTIMERPERIOD; /* set timer0 reload period */
-	TR0 = 1;                /* start timer0 */
-	ET0 = 1;                /* enable timer 0 interrupt */
-	EX0 = 1;                /* enable External 0 interrupt */
-    EA = 1;                 /* global interrupt enable */
+    IE0 = 0; // clear External 0 interrupt request
+	IP = 0x03; // set high intrrupt priorery to timer0 and external interrupt0
+	IT0 = 1; // Interrupt 0 by edge
+	TMOD = 0x12; // mode 2 for timer 0 (reload 8 Bit) , made 1 for timer 1 (16 Bit counter)
+	TL0 = CLOCKTIMERPERIOD; // set timer0 period
+	TH0 = CLOCKTIMERPERIOD; // set timer0 reload period
+	TR0 = 1; // start timer0
+	ET0 = 1; // enable timer 0 interrupt
+	EX0 = 1; // enable External 0 interrupt
+    EA = 1; // global interrupt enable
 
-    /*
-    for (I=0;I<5;I++){
-        INDUCATOR1 = 0;
-        Delay(- 30000);
-        INDUCATOR1 = 1;
+#ifdef _DEBUG_
+    {
+        BYTE I;
+        for (I=0;I<5;I++){
+            INDUCATOR1 = 0;
+            Delay(- 30000);
+            INDUCATOR1 = 1;
+            Delay(- 30000);
+            }
         Delay(- 30000);
         }
-    Delay(- 30000);
-    */
+#endif
 
     while (TRUE) {
-       if (( NewDataRescived) && ( ValidData)) {
-           NewDataRescived = FALSE;
+       if ( NewDataRescived) {
            ProcessRecivedData();
            Process();
            }
+#ifdef _DEBUG_
        INDUCATOR2 = ~ValidData;
+#endif
        if ( TimeAdvanceReq) {
            TimeAdvanceReq = FALSE;
            CurrentTemp = ReadTemperature();
+#ifdef _DEBUG_
            CurrentTemp = 23;
+#endif
            Process();
            TimeAdvance();
            // P1 = (((~( CurrentTemp)) << 2) | 0x03);
