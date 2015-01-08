@@ -44,6 +44,11 @@ sbit INDUCATOR3     = P3^5;
 #define modDRY      3
 #define modFAN      4
 
+#define fanmAUTO    0
+#define fanmLOW     1
+#define fanmMID     2
+#define fanmHIG     3
+
 WORD TimeCounter        = 0;
 BYTE SecsCounter        = 0;
 BYTE RemuteData[6];
@@ -55,9 +60,11 @@ BYTE FanChangeDelay     = SECUND( 0);
 BYTE W4Delay            = SECUND( 120);
 BYTE W4OffDelay         = SECUND( 0);
 BYTE Mode               = modCOOL;
+BYTE FanMode            = fanmAUTO;
 BOOL OnOff              = FALSE;
 BOOL PumperOn           = FALSE;
 BOOL W4On               = FALSE;
+BOOL Continuous         = FALSE;
 BYTE FanSpeed           = 0;
 
 BYTE ReqTemp            = 20;
@@ -254,6 +261,16 @@ VOID SwitchToCold( VOID)
         }
 }
 
+VOID SwitchToFan( VOID)
+{
+    if (Mode != modFAN){
+        Mode = modFAN;
+        PumperOffDelay = SECUND( 10);
+        W4OffDelay     = SECUND( 20);
+        FanOffDelay    = SECUND( 30);
+        }
+}
+
 VOID SwitchToOff( VOID)
 {
     if (OnOff == TRUE){
@@ -355,7 +372,6 @@ VOID SwitchW4Off( VOID)
 
 VOID TimeAdvance( VOID)
 {
-    TimeAdvanceReq = FALSE;
     if ( PumperDelay > SECUND( 0)) PumperDelay -= SECUND( TIMESTEP);
     if ( PumperOffDelay > SECUND( 0)) PumperOffDelay -= SECUND( TIMESTEP);
     if ( FanDelay > SECUND( 0)) FanDelay -= SECUND( TIMESTEP);
@@ -365,17 +381,53 @@ VOID TimeAdvance( VOID)
     if ( W4OffDelay > SECUND( 0)) W4OffDelay -= SECUND( TIMESTEP);
 }
 
+VOID FanProcess( BYTE ATempDelta, BOOL AContinuous)
+{
+   if ( FanDelay == SECUND( 0)) {
+       switch ( FanMode) {
+           case fanmLOW:
+               if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
+               break;
+           case fanmMID:
+               if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+               break;
+           case fanmHIG:
+               if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
+               break;
+           default:
+               if ( AContinuous == TRUE) {
+                   if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                   }
+               else if ( ATempDelta > 6) {
+                   if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
+                   }
+               else if ( ATempDelta > 3) {
+                   if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                   }
+               else {
+                   if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
+                   }
+           }
+       }
+   else SwitchFanSpeed( 0);
+}
+
 VOID Process( VOID)
 {
     if ( OnOff) {
         switch ( Mode){
             case modHEAT:
-                if ( CurrentTemp < ReqTemp){
+                if (( CurrentTemp < ReqTemp) || (Continuous == TRUE)){
                     if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0) && ( W4On == TRUE)) SwitchPumperOn();
                     else SwitchPumperOff();
 
+                    FanProcess( ReqTemp - CurrentTemp, Continuous);
+                    /*
                     if ( FanDelay == SECUND( 0)) {
-                        if (( ReqTemp - CurrentTemp) > 6){
+                        if (Continuous == TRUE){
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                            }
+                        else if (( ReqTemp - CurrentTemp) > 6){
                             if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
                             }
                         else if (( ReqTemp - CurrentTemp) > 3){
@@ -386,7 +438,7 @@ VOID Process( VOID)
                             }
                         }
                     else SwitchFanSpeed( 0);
-
+                    */
                     if (( W4Delay == SECUND( 0)) && ( FanSpeed != 0)) SwitchW4On();
                     else SwitchW4Off();
                     }
@@ -401,13 +453,19 @@ VOID Process( VOID)
                     }
                 break;
             case modCOOL:
-                if ( W4On) SwitchW4Off();
-                if ( CurrentTemp > ReqTemp){
+                if ( W4On == TRUE) SwitchW4Off();
+
+                if (( CurrentTemp > ReqTemp) || (Continuous == TRUE)){
                     if (( PumperDelay == SECUND( 0)) && ( FanSpeed != 0)) SwitchPumperOn();
                     else SwitchPumperOff();
 
+                    FanProcess( CurrentTemp - ReqTemp, Continuous);
+                    /*
                     if ( FanDelay == SECUND( 0)){
-                        if (( CurrentTemp - ReqTemp) > 6){
+                        if (Continuous == TRUE){
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                            }
+                        else if (( CurrentTemp - ReqTemp) > 6){
                             if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
                             }
                         else if (( CurrentTemp - ReqTemp) > 3){
@@ -418,7 +476,7 @@ VOID Process( VOID)
                             }
                         }
                     else SwitchFanSpeed( 0);
-
+                    */
                     }
                 else {
                     if ( PumperOffDelay == SECUND( 0)) {
@@ -426,6 +484,36 @@ VOID Process( VOID)
                         if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
                         };
                     }
+                break;
+            case modFAN:
+                if ( W4On == TRUE) SwitchW4Off();
+                if ( PumperOn == TRUE) SwitchPumperOff();
+
+                if (( CurrentTemp > ReqTemp) || (Continuous == TRUE)){
+                    FanProcess( CurrentTemp - ReqTemp, Continuous);
+                    /*
+                    if ( FanDelay == SECUND( 0)) {
+                        if (Continuous == TRUE){
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                            }
+                        else if (( CurrentTemp - ReqTemp) > 6){
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 3);
+                            }
+                        else if (( CurrentTemp - ReqTemp) > 3){
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 2);
+                            }
+                        else {
+                            if ( FanChangeDelay == SECUND( 0)) SwitchFanSpeed( 1);
+                            }
+                        }
+                    else SwitchFanSpeed( 0);
+                    */
+                    }
+                else {
+                    if ( FanOffDelay == SECUND( 0)) SwitchFanSpeed( 0);
+                    }
+                break;
+            case modDRY:
                 break;
             }
         }
@@ -447,8 +535,6 @@ VOID Process( VOID)
 
 VOID ProcessRecivedData()
 {
-    NewDataRescived = FALSE;
-
     if ((RemuteData[0] & 0x08) != 0x00) SwitchToOn();
     else SwitchToOff();
     // OnOff =
@@ -462,6 +548,7 @@ VOID ProcessRecivedData()
             break;
         case 0x02:
             // Mode = modFAN;
+            SwitchToFan();
             break;
         default:
             SwitchToHot();
@@ -472,16 +559,30 @@ VOID ProcessRecivedData()
         BYTE Temp = RemuteData[5] & 0x0f;
         switch (Temp){
            case 0x00:
+           case 0x0E:
+           case 0x0F:
+               Continuous = TRUE;
                ReqTemp = 0;
                break;
-           case 0x0E:
-               ReqTemp = 100;
+           default:
+               Continuous = FALSE;
+               ReqTemp = Temp + 17;
+           }
+        }
+    {
+        BYTE TempFanMode = RemuteData[0] & 0x30;
+        switch ( TempFanMode){
+           case 0x10:
+               FanMode = fanmHIG;
                break;
-           case 0x0F:
-               ReqTemp = 100;
+           case 0x20:
+               FanMode = fanmMID;
+               break;
+           case 0x30:
+               FanMode = fanmLOW;
                break;
            default:
-               ReqTemp = Temp + 17;
+               FanMode = fanmAUTO;
            }
         }
 }
@@ -518,9 +619,14 @@ main()
     Delay(- 30000);
 
     while (TRUE) {
-       if (( NewDataRescived) && ( ValidData)) ProcessRecivedData();
+       if (( NewDataRescived) && ( ValidData)) {
+           NewDataRescived = FALSE;
+           ProcessRecivedData();
+           Process();
+           }
        INDUCATOR2 = ~ValidData;
        if ( TimeAdvanceReq) {
+           TimeAdvanceReq = FALSE;
            CurrentTemp = ReadTemperature();
            CurrentTemp = 20;
            Process();
