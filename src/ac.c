@@ -587,7 +587,6 @@ main()
 	EX0 = 1;                /* enable External 0 interrupt */
     EA = 1;                 /* global interrupt enable */
 
-    /*
     for (I=0;I<5;I++){
         INDUCATOR1 = 0;
         Delay(- 30000);
@@ -595,7 +594,6 @@ main()
         Delay(- 30000);
         }
     Delay(- 30000);
-    */
 
     while (TRUE) {
        if (( NewDataRescived) && ( ValidData)) {
