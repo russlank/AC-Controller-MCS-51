@@ -18,10 +18,10 @@
 #define FLOAT           float
 #define VOID            void
 
-#define CLOCKTIMERPERIOD    (-250)
-#define TIMETHREASHOULD 	(100 * CLOCKSPEED)
+#define CLOCKTIMERPERIOD    ( -250)
+#define TIMETHREASHOULD 	( 100 * CLOCKSPEED)
 #define TIMESTEP            5
-#define SECUND( X)          ((X) / TIMESTEP)
+#define SECUND( X)          (( X) / TIMESTEP)
 
 sbit CAP            = P1^0;
 sbit OPAMP          = P3^6;
@@ -52,6 +52,7 @@ sbit INDUCATOR3     = P3^5;
 WORD TimeCounter        = 0;
 BYTE SecsCounter        = 0;
 BYTE RemuteData[6];
+WORD Timer              = SECUND( 0);
 BYTE PumperDelay        = SECUND( 600);
 BYTE PumperOffDelay     = SECUND( 0);
 BYTE FanDelay           = SECUND( 60);
@@ -69,6 +70,7 @@ BYTE FanSpeed           = 0;
 
 BYTE ReqTemp            = 20;
 BYTE CurrentTemp        = 20;
+
 
 BOOL ValidData = FALSE;
 BOOL NewDataRescived = FALSE;
@@ -379,6 +381,7 @@ VOID TimeAdvance( VOID)
     if ( FanChangeDelay > SECUND( 0)) FanChangeDelay -= SECUND( TIMESTEP);
     if ( W4Delay > SECUND( 0)) W4Delay -= SECUND( TIMESTEP);
     if ( W4OffDelay > SECUND( 0)) W4OffDelay -= SECUND( TIMESTEP);
+    if ( Timer > SECUND( 0)) Timer -= SECUND( TIMESTEP);
 }
 
 VOID FanProcess( BYTE ATempDelta, BOOL AContinuous)
@@ -550,6 +553,26 @@ VOID ProcessRecivedData()
            default:
                FanMode = fanmAUTO;
            }
+        }
+    {
+        register WORD CurrentTime = 0;
+        register WORD SettingTime = 0;
+
+        if (( RemuteData[2] & 0x10) == 0x10) CurrentTime = 10;
+        CurrentTime += (RemuteData[2] & 0x0f);
+        if (( RemuteData[2] & 0x80) == 0x80) CurrentTime += 12;
+        CurrentTime *= 60;
+        CurrentTime += ( RemuteData[1] & 0x0f) + ((( RemuteData[1] & 0xf0) >> 4) * 10);
+
+        if (( RemuteData[4] & 0x10) == 0x10) SettingTime = 10;
+        SettingTime += (RemuteData[4] & 0x0f);
+        if (( RemuteData[4] & 0x80) == 0x80) SettingTime += 12;
+        SettingTime *= 60;
+        SettingTime += ( RemuteData[3] & 0x0f) + ((( RemuteData[3] & 0xf0) >> 4) * 10);
+
+        if ( CurrentTime <= SettingTime) Timer = SettingTime - CurrentTime;
+        else Timer = 24 * 60 - CurrentTime + SettingTime;
+        Timer *= SECUND( 60);
         }
 }
 
