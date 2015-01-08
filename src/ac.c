@@ -1,7 +1,7 @@
 #include <reg51.h>
 // #include <intrins.h>
 
-// #define _DEBUG_
+#define _DEBUG_
 
 #define CLOCKSPEED      8
 // 8 MHz.
@@ -39,25 +39,35 @@
 #define SECUND( X)          (( X) / TIMESTEP)
 #define TIMETHREASHOULD     3
 // ( 100 * CLOCKSPEED)
+#define Beep()              BeepCounter = 255
 
 sbit OPAMP_OUTPUT   = P3^6;
 sbit INFRAINPUT	    = P3^2;
 
+
+BOOL PUMPER;
+BOOL W4;
+BOOL FANLOW;
+BOOL FANMID;
+BOOL FANHIG;
+BOOL SWING;
+/*
 sbit PUMPER         = P1^7;
 sbit W4             = P1^6;
 sbit FANLOW         = P1^5;
 sbit FANMID         = P1^4;
 sbit FANHIG         = P1^3;
 sbit SWING          = P1^2;
+*/
 sbit N_INPUT        = P1^1;
 sbit P_INPUT        = P1^0;
 sbit CAP            = P1^0;
+sbit Spkr           = P3^4;
 #ifdef _DEBUG_
 sbit INDUCATOR1     = P3^0;
-sbit INDUCATOR2     = P3^4;
+sbit INDUCATOR2     = P3^7;
 sbit INDUCATOR3     = P3^5;
 sbit INDUCATOR4     = P3^1;
-sbit INDUCATOR5     = P3^7;
 #endif
 
 WORD TimeCounter        = 0;
@@ -84,6 +94,7 @@ BOOL NewDataRescived    = FALSE;
 BOOL TimeAdvanceReq     = FALSE;
 BYTE SwitchMode         = swmNONE;
 BYTE RemuteData[6];
+BYTE BeepCounter        = 0;
 #ifdef _DEBUG_
 BOOL ValidData = FALSE;
 #endif
@@ -104,6 +115,12 @@ TIMER0
             TimeAdvanceReq = TRUE;
             }
         }
+
+    if (BeepCounter > 0) {
+        Spkr = ~Spkr;
+        BeepCounter --;
+        }
+    else Spkr = 0;
 }
 
 BYTE MeasurePW( BOOL Value)
@@ -178,8 +195,6 @@ Finish:
     TF1 = 1; // Set timer overflow flag on to protect another time measurments actions from blocking
 	IE0 = 0; // Clear another interrupt requests that occured by series of pulses
 }
-
-
 
 #ifdef _DEBUG_
 
@@ -487,21 +502,21 @@ VOID Process( VOID)
                OnOffState = (Timer > 0);
 #ifdef _DEBUG_
                INDUCATOR4 = 0;
-               INDUCATOR5 = 1;
+               INDUCATOR2 = 1;
 #endif
                break;
            case swmTIMER:
                OnOffState = (Timer == 0);
 #ifdef _DEBUG_
                INDUCATOR4 = 1;
-               INDUCATOR5 = 0;
+               INDUCATOR2 = 0;
 #endif
                break;
            default:
                OnOffState = TRUE;
 #ifdef _DEBUG_
                INDUCATOR4 = 1;
-               INDUCATOR5 = 1;
+               INDUCATOR2 = 1;
 #endif
            }
        }
@@ -661,6 +676,8 @@ VOID ProcessRecivedData()
             };
 
         } while (NewDataRescived == TRUE); // Repeat process new data if there is new data has been recived while processing
+
+        Beep();
 }
 
 main()
@@ -697,15 +714,13 @@ main()
         Delay(- 30000);
         }
 #endif
+    Beep();
 
     while (TRUE) {
        if ( NewDataRescived) {
            ProcessRecivedData();
            Process();
            }
-#ifdef _DEBUG_
-       INDUCATOR2 = ~ValidData;
-#endif
        if ( TimeAdvanceReq) {
            TimeAdvanceReq = FALSE;
            CurrentTemp = ReadTemperature();
@@ -714,7 +729,7 @@ main()
 #endif
            Process();
            TimeAdvance();
-           // P1 = (((~( CurrentTemp)) << 2) | 0x03);
+           P1 = (((~( CurrentTemp)) << 2) | 0x03);
            };
        }
 }
