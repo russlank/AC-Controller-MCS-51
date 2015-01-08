@@ -5,7 +5,6 @@
 
 #define CLOCKSPEED      8
 // 8 MHz.
-
 #define TIMER0          Timer0() interrupt 1 using 1
 #define TIMER1          Timer1() interrupt 3 using 2
 #define BOOL            bit
@@ -20,12 +19,26 @@
 #define FLOAT           float
 #define VOID            void
 
+#define modCOOL     0
+#define modDRY      1
+#define modFAN      2
+#define modHEAT     3
+#define modNONE     4
+
+#define fanmAUTO    0
+#define fanmLOW     1
+#define fanmMID     2
+#define fanmHIG     3
+
+#define swmNONE     0
+#define swmSLEEP    1
+#define swmTIMER    2
+
 #define CLOCKTIMERPERIOD    ( -250)
-#define TIMETHREASHOULD     3
-// ( 100 * CLOCKSPEED)
 #define TIMESTEP            5
 #define SECUND( X)          (( X) / TIMESTEP)
-
+#define TIMETHREASHOULD     3
+// ( 100 * CLOCKSPEED)
 
 sbit OPAMP_OUTPUT   = P3^6;
 sbit INFRAINPUT	    = P3^2;
@@ -39,28 +52,16 @@ sbit SWING          = P1^2;
 sbit N_INPUT        = P1^1;
 sbit P_INPUT        = P1^0;
 sbit CAP            = P1^0;
-
 #ifdef _DEBUG_
 sbit INDUCATOR1     = P3^0;
 sbit INDUCATOR2     = P3^4;
 sbit INDUCATOR3     = P3^5;
+sbit INDUCATOR4     = P3^1;
+sbit INDUCATOR5     = P3^7;
 #endif
-
-
-#define modCOOL     0
-#define modDRY      1
-#define modFAN      2
-#define modHEAT     3
-#define modNONE     4
-
-#define fanmAUTO    0
-#define fanmLOW     1
-#define fanmMID     2
-#define fanmHIG     3
 
 WORD TimeCounter        = 0;
 BYTE SecsCounter        = 0;
-BYTE RemuteData[6];
 WORD Timer              = SECUND( 0);
 BYTE PumperDelay        = SECUND( 600);
 BYTE PumperOffDelay     = SECUND( 0);
@@ -77,16 +78,15 @@ BOOL PumperOn           = FALSE;
 BOOL W4On               = FALSE;
 BOOL Continuous         = FALSE;
 BYTE FanSpeed           = 0;
-
-BYTE ReqTemp            = 20;
+BYTE ReqTemp            = 28;
 BYTE CurrentTemp        = 20;
-
+BOOL NewDataRescived    = FALSE;
+BOOL TimeAdvanceReq     = FALSE;
+BYTE SwitchMode         = swmNONE;
+BYTE RemuteData[6];
 #ifdef _DEBUG_
 BOOL ValidData = FALSE;
 #endif
-
-BOOL NewDataRescived = FALSE;
-BOOL TimeAdvanceReq = FALSE;
 
 TIMER0
 {
@@ -314,9 +314,9 @@ VOID SwitchToFan( VOID)
 
 VOID _SetOffDelays( VOID)
 {
-    PumperOffDelay = SECUND( 10);
-    W4OffDelay     = SECUND( 20);
-    FanOffDelay    = SECUND( 30);
+    PumperOffDelay = SECUND( TIMESTEP) * 1;
+    W4OffDelay     = SECUND( TIMESTEP) * 2;
+    FanOffDelay    = SECUND( TIMESTEP) * 3;
 }
 
 VOID SwitchToOff( VOID)
@@ -410,6 +410,15 @@ VOID SwitchW4Off( VOID)
 
 VOID TimeAdvance( VOID)
 {
+    /*
+    PumperDelay = 0;
+    PumperOffDelay = 0;
+    FanDelay = 0;
+    FanOffDelay = 0;
+    FanChangeDelay = 0;
+    W4Delay = 0;
+    W4OffDelay = 0;
+    */
     if ( PumperDelay > SECUND( 0)) PumperDelay -= SECUND( TIMESTEP);
     if ( PumperOffDelay > SECUND( 0)) PumperOffDelay -= SECUND( TIMESTEP);
     if ( FanDelay > SECUND( 0)) FanDelay -= SECUND( TIMESTEP);
@@ -465,7 +474,35 @@ VOID FanProcess( BYTE ATempDelta, BOOL AContinuous)
 
 VOID Process( VOID)
 {
+    BOOL OnOffState;
+
     if ( OnOff) {
+       switch ( SwitchMode){
+           case swmSLEEP:
+               OnOffState = (Timer > 0);
+#ifdef _DEBUG_
+               INDUCATOR4 = 0;
+               INDUCATOR5 = 1;
+#endif
+               break;
+           case swmTIMER:
+               OnOffState = (Timer == 0);
+#ifdef _DEBUG_
+               INDUCATOR4 = 1;
+               INDUCATOR5 = 0;
+#endif
+               break;
+           default:
+               OnOffState = TRUE;
+#ifdef _DEBUG_
+               INDUCATOR4 = 1;
+               INDUCATOR5 = 1;
+#endif
+           }
+       }
+    else OnOffState = FALSE;
+
+    if ( OnOffState) {
         switch ( Mode){
             case modHEAT:
                 if (( CurrentTemp < ReqTemp) || (Continuous == TRUE)){
@@ -521,13 +558,13 @@ VOID Process( VOID)
     else {
         if ( PumperOn){
             SwitchPumperOff();
-            FanOffDelay = SECUND( 20);
-            W4OffDelay = SECUND( 10);
+            FanOffDelay = SECUND( TIMESTEP) * 2;
+            W4OffDelay = SECUND( TIMESTEP);
             }
 
         if (( W4On) && (W4OffDelay == SECUND( 0))){
             SwitchW4Off();
-            FanOffDelay = SECUND( 10);
+            FanOffDelay = SECUND( TIMESTEP);
             }
 
         if (( FanSpeed != 0) && ( FanOffDelay == SECUND( 0))) SwitchFanSpeed( 0);
@@ -543,7 +580,7 @@ WORD _RetriveTime( BYTE *ATime)
         if (( Hours & 0x80) != 0x00) BTime += 12;
         {
             register BYTE Minutes = *ATime;
-            Minutes += ( Minutes & 0x0f) + ((Minutes >> 4) * 10);
+            Minutes = ( Minutes & 0x0f) + ((Minutes >> 4) * 10);
             return ( ((WORD)BTime * 60) + Minutes);
             }
         }
@@ -556,6 +593,7 @@ VOID ProcessRecivedData()
 
         if ((RemuteData[0] & 0x08) != 0x00) SwitchToOn();
         else SwitchToOff();
+
         {
             register BYTE NewMode = RemuteData[0] & 0x03;
             /*
@@ -607,9 +645,16 @@ VOID ProcessRecivedData()
             default:
                 FanMode = fanmAUTO;
             }
-        Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
-        if ( Timer > (24 * 60)) Timer -= (24 * 60);
-        Timer *= SECUND( 60);
+
+        SwitchMode = (RemuteData[4] & 0x60) >> 5;
+
+        if ( SwitchMode == swmSLEEP) Timer = SECUND( 60) * 10;
+        else {
+            Timer = 24 * 60 + _RetriveTime( &RemuteData[3]) - _RetriveTime( &RemuteData[1]);
+            if ( Timer > (24 * 60)) Timer -= (24 * 60);
+            Timer *= SECUND( 60);
+            };
+
         } while (NewDataRescived == TRUE); // Repeat process new data if there is new data has been recived while processing
 }
 
